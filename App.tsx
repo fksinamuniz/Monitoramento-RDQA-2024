@@ -4,8 +4,7 @@ import { Goal, YearlyGoalData } from './types';
 import { DATA_2024_RAW, CALCULATION_METHODS } from './constants';
 import GoalCard from './components/GoalCard';
 import GoalModal from './components/GoalModal';
-import { Search, Filter, Database, FileBarChart, Download, Settings, RefreshCw, Layers, Target, Info, LayoutGrid } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { Search, Filter, Database, FileBarChart, RefreshCw, Layers, Target, FileText, LayoutGrid, ChevronRight } from 'lucide-react';
 import { getStatus, getSimplifiedStatus } from './utils/helpers';
 
 const App: React.FC = () => {
@@ -28,7 +27,6 @@ const App: React.FC = () => {
         },
         '2023': { esperado: item.esperado, resultado: "---", quadrimestres: {} },
         '2022': { esperado: item.esperado, resultado: "---", quadrimestres: {} },
-        '2025': { esperado: item.esperado, resultado: "S/N", quadrimestres: {} }
       };
 
       return {
@@ -37,25 +35,20 @@ const App: React.FC = () => {
         polaridade: item.pol,
         diretriz: item.diretriz || "Geral",
         objetivo: item.objetivo || "Geral",
-        calculationMethod: CALCULATION_METHODS[item.id] || "Conforme pactuação ministerial e municipal.",
+        analysis: (item as any).analysis,
+        calculationMethod: CALCULATION_METHODS[item.id] || "Indicador calculado conforme padrões técnicos do RDQA/RAG.",
         yearly_data
       };
     });
   }, []);
 
-  // Unique lists for dropdowns
-  const diretrizes = useMemo(() => {
-    const set = new Set(goals.map(g => g.diretriz));
-    return Array.from(set).sort();
-  }, [goals]);
-
-  const objetivos = useMemo(() => {
-    const filtered = selectedDiretriz === 'todas' 
-      ? goals 
-      : goals.filter(g => g.diretriz === selectedDiretriz);
-    const set = new Set(filtered.map(g => g.objetivo));
-    return Array.from(set).sort();
-  }, [goals, selectedDiretriz]);
+  // Filter dependent objectives
+  const availableObjectives = useMemo(() => {
+    if (selectedDiretriz === 'todas') {
+      return Array.from(new Set(goals.map(g => g.objetivo))).sort();
+    }
+    return Array.from(new Set(goals.filter(g => g.diretriz === selectedDiretriz).map(g => g.objetivo))).sort();
+  }, [selectedDiretriz, goals]);
 
   const filteredGoals = useMemo(() => {
     return goals.filter(goal => {
@@ -89,11 +82,7 @@ const App: React.FC = () => {
       counts[getSimplifiedStatus(status.text)]++;
     });
 
-    return [
-      { name: 'Alcançada', value: counts['Alcançada'], color: '#10b981' },
-      { name: 'Não Alcançada', value: counts['Não Alcançada'], color: '#f43f5e' },
-      { name: 'Em Andamento', value: counts['Outro'], color: '#f59e0b' }
-    ];
+    return counts;
   }, [filteredGoals, selectedYear, selectedQuad]);
 
   const handleResetFilters = () => {
@@ -105,158 +94,140 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F9FAFB]">
-      {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-40 shadow-sm">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-700 p-2.5 rounded-xl text-white shadow-blue-200 shadow-lg">
-              <Database size={22} />
-            </div>
-            <div>
-              <h1 className="text-xl font-black text-gray-900 tracking-tighter">RAG PARAUAPEBAS</h1>
-              <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Painel Histórico PMS 2022-2025</p>
-            </div>
+    <div className="min-h-screen flex flex-col bg-[#F8FAFC]">
+      {/* Original Header */}
+      <header className="bg-white py-4 px-6 shadow-sm border-b border-gray-100">
+        <div className="container mx-auto flex items-center gap-4">
+          <div className="bg-[#1D4ED8] p-3 rounded-2xl shadow-lg shadow-blue-100">
+            <Database className="text-white" size={24} />
           </div>
-          
-          <div className="hidden lg:flex items-center gap-4">
-             <div className="text-right border-r pr-4">
-                <p className="text-[10px] font-bold text-gray-400 uppercase">Indicadores Totais</p>
-                <p className="text-sm font-black text-gray-900">97 Metas</p>
-             </div>
-             <button className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black py-2.5 px-5 rounded-xl transition-all shadow-emerald-100 shadow-md">
-                <Download size={14} /> EXPORTAR RAG
-             </button>
+          <div>
+            <h1 className="text-xl font-black text-[#0F172A] tracking-tight leading-none uppercase">RAG PARAUAPEBAS</h1>
+            <p className="text-[11px] text-[#2563EB] font-bold mt-1 uppercase tracking-wider">Painel Histórico PMS 2022-2025</p>
           </div>
         </div>
       </header>
 
-      {/* Toolbar / Filters */}
-      <div className="bg-white border-b py-6 sticky top-16 z-30">
-        <div className="container mx-auto px-4 space-y-5">
-          {/* Top Row */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-            <div className="md:col-span-5 lg:col-span-6 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input 
-                type="text" 
-                placeholder="Meta ou ID (ex: 78)..."
-                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all font-medium"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
+      {/* Primary Filters Row */}
+      <div className="container mx-auto px-6 mt-8">
+        <div className="flex flex-col lg:flex-row items-center gap-4">
+          <div className="flex-grow w-full relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Pesquisar por indicador ou número da meta..."
+              className="w-full pl-12 pr-4 py-3.5 bg-white border border-gray-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
 
-            <div className="md:col-span-3 lg:col-span-2 relative">
-              <select className="w-full pl-3 pr-8 py-3 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-blue-500"
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+            <div className="relative flex-grow sm:flex-grow-0">
+              <select className="pl-4 pr-10 py-3.5 bg-white border border-gray-200 rounded-2xl text-xs font-bold text-gray-700 appearance-none outline-none cursor-pointer hover:border-blue-300 transition-colors uppercase shadow-sm"
                 value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
                 <option value="2024">ANO BASE: 2024</option>
                 <option value="2023">ANO BASE: 2023</option>
                 <option value="2022">ANO BASE: 2022</option>
               </select>
-              <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+              <Filter className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
             </div>
 
-            <div className="md:col-span-2 relative">
-              <select className="w-full pl-3 pr-8 py-3 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold appearance-none cursor-pointer outline-none focus:ring-2 focus:ring-blue-500"
+            <div className="relative flex-grow sm:flex-grow-0">
+              <select className="pl-4 pr-10 py-3.5 bg-white border border-gray-200 rounded-2xl text-xs font-bold text-gray-700 appearance-none outline-none cursor-pointer hover:border-blue-300 transition-colors uppercase shadow-sm"
                 value={selectedQuad} onChange={(e) => setSelectedQuad(e.target.value)}>
-                <option value="anual">PERÍODO: ANUAL</option>
-                <option value="1">1º QUADRIMESTRE</option>
-                <option value="2">2º QUADRIMESTRE</option>
-                <option value="3">3º QUADRIMESTRE</option>
+                <option value="anual">RESUMO ANUAL (RAG)</option>
+                <option value="1">1º QUADRIMESTRE (RDQA)</option>
+                <option value="2">2º QUADRIMESTRE (RDQA)</option>
+                <option value="3">3º QUADRIMESTRE (RDQA)</option>
               </select>
-              <FileBarChart className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+              <FileBarChart className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
             </div>
 
-            <button onClick={handleResetFilters} className="md:col-span-2 flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs py-3 rounded-xl transition-all">
+            <button onClick={handleResetFilters} className="px-6 py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-xs rounded-2xl flex items-center gap-2 transition-all">
               <RefreshCw size={14} /> RESET
             </button>
           </div>
+        </div>
 
-          {/* Bottom Row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="relative">
-              <Layers className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-600" size={16} />
-              <select className="w-full pl-10 pr-8 py-3 bg-white border border-gray-200 rounded-xl text-[11px] font-bold text-gray-700 appearance-none shadow-sm outline-none focus:ring-2 focus:ring-blue-500"
-                value={selectedDiretriz} onChange={(e) => { setSelectedDiretriz(e.target.value); setSelectedObjetivo('todos'); }}>
-                <option value="todas">TODAS AS DIRETRIZES</option>
-                {diretrizes.map((d, i) => <option key={i} value={d}>{d}</option>)}
-              </select>
-            </div>
+        {/* Dependent Select Filters Row */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <div className="relative group">
+            <Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-500 group-focus-within:scale-110 transition-transform" size={16} />
+            <select className="w-full pl-12 pr-6 py-4 bg-white border border-gray-200 rounded-2xl text-[11px] font-black text-gray-700 appearance-none outline-none uppercase tracking-tight shadow-sm hover:border-blue-200 transition-colors"
+              value={selectedDiretriz} onChange={(e) => { setSelectedDiretriz(e.target.value); setSelectedObjetivo('todos'); }}>
+              <option value="todas">FILTRAR POR DIRETRIZ (TODAS)</option>
+              {Array.from(new Set(goals.map(g => g.diretriz))).sort().map((d, i) => <option key={i} value={d}>{d}</option>)}
+            </select>
+          </div>
 
-            <div className="relative">
-              <Target className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-600" size={16} />
-              <select className="w-full pl-10 pr-8 py-3 bg-white border border-gray-200 rounded-xl text-[11px] font-bold text-gray-700 appearance-none shadow-sm outline-none focus:ring-2 focus:ring-blue-500"
-                value={selectedObjetivo} onChange={(e) => setSelectedObjetivo(e.target.value)}>
-                <option value="todos">TODOS OS OBJETIVOS</option>
-                {objetivos.map((o, i) => <option key={i} value={o}>{o}</option>)}
-              </select>
-            </div>
+          <div className="relative group">
+            <Target className="absolute left-4 top-1/2 -translate-y-1/2 text-purple-500 group-focus-within:scale-110 transition-transform" size={16} />
+            <select className="w-full pl-12 pr-6 py-4 bg-white border border-gray-200 rounded-2xl text-[11px] font-black text-gray-700 appearance-none outline-none uppercase tracking-tight shadow-sm hover:border-purple-200 transition-colors disabled:opacity-50"
+              value={selectedObjetivo} onChange={(e) => setSelectedObjetivo(e.target.value)}>
+              <option value="todos">FILTRAR POR OBJETIVO (TODOS)</option>
+              {availableObjectives.map((o, i) => <option key={i} value={o}>{o}</option>)}
+            </select>
+          </div>
 
-            <div className="relative">
-              <LayoutGrid className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600" size={16} />
-              <select className="w-full pl-10 pr-8 py-3 bg-white border border-gray-200 rounded-xl text-[11px] font-bold text-gray-700 appearance-none shadow-sm outline-none focus:ring-2 focus:ring-blue-500"
-                value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
-                <option value="todos">TODOS OS STATUS</option>
-                <option value="Alcançada">ALCANÇADA / SUPERADA</option>
-                <option value="Não Alcançada">NÃO ALCANÇADA</option>
-              </select>
-            </div>
+          <div className="relative group">
+            <LayoutGrid className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500 group-focus-within:scale-110 transition-transform" size={16} />
+            <select className="w-full pl-12 pr-6 py-4 bg-white border border-gray-200 rounded-2xl text-[11px] font-black text-gray-700 appearance-none outline-none uppercase tracking-tight shadow-sm hover:border-emerald-200 transition-colors"
+              value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
+              <option value="todos">FILTRAR POR STATUS (TODOS)</option>
+              <option value="Alcançada">ALCANÇADA / SUPERADA</option>
+              <option value="Não Alcançada">NÃO ALCANÇADA</option>
+              <option value="Outro">EM ANDAMENTO / APURANDO</option>
+            </select>
           </div>
         </div>
       </div>
 
-      <main className="container mx-auto px-4 py-8 flex-grow">
-        {/* Statistics Hero */}
-        <div className="mb-12 grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-3 bg-white p-8 rounded-3xl border shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-bl-full -mr-10 -mt-10 opacity-50"></div>
-            <h2 className="text-lg font-black text-gray-900 mb-8 flex items-center gap-3">
-              <FileBarChart className="text-blue-700" size={24} /> 
-              RESUMO DE PERFORMANCE <span className="text-blue-200">/</span> {selectedYear}
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 relative z-10">
-              {chartData.map((item, idx) => (
-                <div key={idx} className="p-6 rounded-2xl border bg-gray-50 flex flex-col items-center justify-center text-center hover:bg-white transition-all hover:shadow-lg group">
-                  <span className="text-4xl font-black mb-2 transition-transform group-hover:scale-110" style={{ color: item.color }}>{item.value}</span>
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-[2px]">{item.name}</span>
-                </div>
-              ))}
+      <main className="container mx-auto px-6 py-8 flex-grow">
+        {/* Summary Card with Counter Animation */}
+        <div className="mb-10 bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm">
+          <div className="flex items-center justify-between mb-8 border-b border-gray-50 pb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-50 rounded-xl">
+                <FileText className="text-blue-600" size={24} />
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-[#0F172A] tracking-tighter uppercase leading-none">Visão Geral de Performance</h2>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Ciclo PMS {selectedYear} / Período: {selectedQuad === 'anual' ? 'Anual' : selectedQuad + 'º Quad'}</p>
+              </div>
+            </div>
+            <div className="hidden sm:flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-2xl border border-gray-100">
+              <span className="text-[10px] font-black text-gray-400 uppercase">Progresso Global:</span>
+              <span className="text-sm font-black text-blue-600">{( (chartData.Alcançada / (filteredGoals.length || 1)) * 100 ).toFixed(1)}%</span>
             </div>
           </div>
           
-          <div className="bg-white p-8 rounded-3xl border shadow-sm flex flex-col items-center justify-center">
-            <div className="h-[140px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={chartData} cx="50%" cy="50%" innerRadius={45} outerRadius={60} paddingAngle={8} dataKey="value" stroke="none">
-                    {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div className="group bg-[#F8FAFC] p-8 rounded-3xl flex flex-col items-center justify-center text-center transition-all hover:bg-emerald-50 border border-transparent hover:border-emerald-100">
+              <span className="text-6xl font-black text-[#10B981] mb-2 tracking-tighter">{chartData.Alcançada}</span>
+              <span className="text-[11px] font-black text-gray-400 group-hover:text-emerald-600 uppercase tracking-widest transition-colors">ALCANÇADA / SUPERADA</span>
             </div>
-            <div className="mt-4 text-center">
-              <p className="text-xs font-black text-gray-900">DISTRIBUIÇÃO ATUAL</p>
-              <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">Dados Sincronizados</p>
+            <div className="group bg-[#F8FAFC] p-8 rounded-3xl flex flex-col items-center justify-center text-center transition-all hover:bg-rose-50 border border-transparent hover:border-rose-100">
+              <span className="text-6xl font-black text-[#F43F5E] mb-2 tracking-tighter">{chartData['Não Alcançada']}</span>
+              <span className="text-[11px] font-black text-gray-400 group-hover:text-rose-600 uppercase tracking-widest transition-colors">NÃO ALCANÇADA</span>
+            </div>
+            <div className="group bg-[#F8FAFC] p-8 rounded-3xl flex flex-col items-center justify-center text-center transition-all hover:bg-amber-50 border border-transparent hover:border-amber-100">
+              <span className="text-6xl font-black text-[#F59E0B] mb-2 tracking-tighter">{chartData.Outro}</span>
+              <span className="text-[11px] font-black text-gray-400 group-hover:text-amber-600 uppercase tracking-widest transition-colors">EM ANDAMENTO</span>
             </div>
           </div>
         </div>
 
-        {/* Goals Grid */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          <div>
-            <h2 className="text-2xl font-black text-gray-900 tracking-tight">METAS E INDICADORES</h2>
-            <p className="text-xs text-gray-500 font-bold mt-1">Exibindo {filteredGoals.length} de {goals.length} metas cadastradas</p>
-          </div>
-          <div className="flex items-center gap-3">
-             <div className="flex -space-x-2">
-                <div className="w-8 h-8 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center text-[10px] text-white font-bold">A</div>
-                <div className="w-8 h-8 rounded-full bg-rose-500 border-2 border-white flex items-center justify-center text-[10px] text-white font-bold">N</div>
-                <div className="w-8 h-8 rounded-full bg-amber-500 border-2 border-white flex items-center justify-center text-[10px] text-white font-bold">E</div>
+        {/* Goals Grid Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+           <div className="flex items-center gap-4">
+             <h3 className="text-2xl font-black text-[#0F172A] tracking-tighter uppercase">Painel de Metas</h3>
+             <ChevronRight className="text-gray-300 hidden sm:block" />
+             <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-400 uppercase">Mostrando</span>
+                <span className="bg-blue-600 text-white px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tight">{filteredGoals.length} Indicadores</span>
              </div>
-             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Legenda RAG Ativa</span>
-          </div>
+           </div>
         </div>
 
         {filteredGoals.length > 0 ? (
@@ -266,56 +237,47 @@ const App: React.FC = () => {
             ))}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-32 bg-white rounded-3xl border border-dashed border-gray-300">
-            <div className="bg-gray-50 p-6 rounded-full mb-6">
-              <RefreshCw className="text-gray-300" size={48} />
-            </div>
-            <p className="text-xl font-black text-gray-900">NENHUM DADO ENCONTRADO</p>
-            <p className="text-sm text-gray-500 font-medium mt-2">Tente ajustar os filtros ou pesquisar por outro termo.</p>
-            <button onClick={handleResetFilters} className="mt-8 bg-blue-700 text-white px-8 py-3 rounded-xl font-black text-xs shadow-lg shadow-blue-100 hover:scale-105 transition-all">
-              LIMPAR TUDO
+          <div className="flex flex-col items-center justify-center py-24 bg-white rounded-[2.5rem] border border-dashed border-gray-200">
+            <Database className="text-gray-100 mb-6" size={80} />
+            <p className="text-xl font-black text-gray-400 uppercase tracking-widest">Nenhum indicador atende aos filtros</p>
+            <p className="text-xs text-gray-400 mt-2">Tente ajustar os parâmetros de Diretriz ou Objetivo.</p>
+            <button onClick={handleResetFilters} className="mt-8 px-8 py-3 bg-blue-50 text-blue-600 rounded-2xl font-black text-xs hover:bg-blue-100 transition-all tracking-tight uppercase">
+              REDEFINIR TODOS OS FILTROS
             </button>
           </div>
         )}
       </main>
 
       {/* Footer */}
-      <footer className="bg-white border-t py-12 mt-20">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
-            <div className="col-span-1 lg:col-span-2 space-y-4">
-              <div className="flex items-center gap-3">
-                 <div className="bg-blue-700 p-2 rounded-lg text-white"><Database size={18} /></div>
-                 <span className="font-black text-xl tracking-tighter text-gray-900 uppercase">RAG Parauapebas</span>
-              </div>
-              <p className="text-xs text-gray-500 font-medium leading-relaxed max-w-md">Plataforma desenvolvida para análise técnica e monitoramento dos resultados históricos do Plano Municipal de Saúde. Os dados são extraídos de fontes oficiais como SISAB, SINASC e sistemas próprios da SEMSA.</p>
-            </div>
-            <div>
-               <h4 className="text-[10px] font-black text-gray-900 uppercase tracking-widest mb-4">Referências</h4>
-               <ul className="space-y-2">
-                 <li><a href="#" className="text-xs text-blue-600 font-bold hover:underline">PMS 2022-2025</a></li>
-                 <li><a href="#" className="text-xs text-blue-600 font-bold hover:underline">Relatórios RDQA</a></li>
-               </ul>
-            </div>
-            <div>
-               <h4 className="text-[10px] font-black text-gray-900 uppercase tracking-widest mb-4">Suporte Técnico</h4>
-               <div className="bg-gray-50 p-4 rounded-xl border">
-                 <p className="text-[10px] font-bold text-gray-400">Versão</p>
-                 <p className="text-xs font-black text-gray-900">V.0.1.25-Build</p>
-               </div>
-            </div>
+      <footer className="bg-white border-t border-gray-100 py-12 mt-12">
+        <div className="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8 text-center md:text-left">
+          <div className="space-y-2">
+             <div className="flex items-center gap-3 justify-center md:justify-start">
+                <div className="bg-gray-100 p-2 rounded-lg"><Database size={18} className="text-gray-400" /></div>
+                <h4 className="font-black text-gray-900 tracking-tight text-sm uppercase">DATA OPS / SEMSA</h4>
+             </div>
+             <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">© 2025 PMS PARAUAPEBAS / MONITORAMENTO ESTRATÉGICO</p>
           </div>
-          <div className="pt-8 border-t flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">© 2025 SEMSA PARAUAPEBAS - GESTÃO DE SAÚDE</p>
-            <div className="flex items-center gap-4">
-               <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-               <span className="text-[10px] font-black text-gray-600 uppercase">Base de Dados Integrada</span>
-            </div>
+          <div className="flex flex-wrap justify-center gap-8">
+             <div className="text-center">
+                <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-1">DATA REPOSITORY</p>
+                <span className="text-[10px] font-black text-blue-600 uppercase">PMS-2022-2025.JSON</span>
+             </div>
+             <div className="text-center border-l border-gray-100 pl-8">
+                <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-1">BUILD VERSION</p>
+                <span className="text-[10px] font-black text-gray-600 uppercase">V.0.3.5-LATEST</span>
+             </div>
+             <div className="text-center border-l border-gray-100 pl-8">
+                <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-1">SERVER STATUS</p>
+                <div className="flex items-center gap-2 justify-center">
+                   <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                   <span className="text-[10px] font-black text-gray-600 uppercase">OPERATIONAL</span>
+                </div>
+             </div>
           </div>
         </div>
       </footer>
 
-      {/* Goal Detail Modal */}
       {selectedGoal && <GoalModal goal={selectedGoal} year={selectedYear} quad={selectedQuad} onClose={() => setSelectedGoal(null)} />}
     </div>
   );

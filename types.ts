@@ -22,6 +22,7 @@ export interface Goal {
   polaridade: Polarity;
   diretriz: string;
   objetivo: string;
+  analysis?: string;
   calculationMethod: string;
   yearly_data: { [year: string]: YearlyGoalData };
 }
