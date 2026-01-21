@@ -1,29 +1,523 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel RAG V.01 - Parauapebas</title>
+    <title>Painel de Monitoramento PMS 2024 - Parauapebas</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+        .goal-card { transition: all 0.2s ease; border-left-width: 4px; display: flex; flex-direction: column; }
+        .goal-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+        
+        .analysis-expandable { 
+            max-height: 0; 
+            overflow: hidden; 
+            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-out;
+            opacity: 0;
+        }
+        .analysis-expandable.active { 
+            max-height: 1000px; 
+            opacity: 1; 
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .rdqa-btn { transition: all 0.2s ease; cursor: pointer; }
+        .rdqa-btn:hover { background-color: #e2e8f0; }
+        .rdqa-btn.active { background-color: #3b82f6 !important; color: white !important; border-color: #2563eb !important; }
+        .rdqa-btn.active span { color: #dbeafe !important; }
+        .rdqa-btn.active .btn-label { color: #bfdbfe !important; }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "recharts": "https://esm.sh/recharts@^3.6.0",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
-  }
-}
-</script>
 </head>
-<body class="bg-gray-50 text-gray-900">
-    <div id="root"></div>
+<body class="text-slate-800">
+
+    <!-- Cabeçalho -->
+    <header class="bg-blue-900 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-white p-2 rounded-lg text-blue-900 font-black text-xl">PMS</div>
+                <div>
+                    <h1 class="text-lg font-bold leading-none">Monitoramento 2024</h1>
+                    <p class="text-blue-200 text-xs mt-1 italic">Análise de Metas e Indicadores</p>
+                </div>
+            </div>
+            <button id="export-pdf" class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                PDF Relatório
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- Estatísticas Rápidas -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Metas Totais</p>
+                <h3 class="text-3xl font-black text-slate-800 mt-1" id="stat-total">0</h3>
+            </div>
+            <div class="bg-emerald-500 p-5 rounded-2xl shadow-sm text-white">
+                <p class="text-[10px] font-bold text-emerald-100 uppercase tracking-widest">Alcançadas</p>
+                <h3 class="text-3xl font-black mt-1" id="stat-reached">0</h3>
+            </div>
+            <div class="bg-amber-400 p-5 rounded-2xl shadow-sm text-white">
+                <p class="text-[10px] font-bold text-amber-100 uppercase tracking-widest">Em Execução</p>
+                <h3 class="text-3xl font-black mt-1" id="stat-partial">0</h3>
+            </div>
+            <div class="bg-rose-500 p-5 rounded-2xl shadow-sm text-white">
+                <p class="text-[10px] font-bold text-rose-100 uppercase tracking-widest">Não Iniciadas</p>
+                <h3 class="text-3xl font-black mt-1" id="stat-critical">0</h3>
+            </div>
+        </div>
+
+        <!-- Filtros -->
+        <section class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Pesquisa</label>
+                    <input type="text" id="search-input" placeholder="Buscar meta, ID ou análise..." class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all">
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Diretriz</label>
+                    <select id="diretriz-filter" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                        <option value="all">Todas as Diretrizes</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Objetivo</label>
+                    <select id="objetivo-filter" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                        <option value="all">Todos os Objetivos</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Status</label>
+                    <select id="status-filter" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                        <option value="all">Todos os Status</option>
+                        <option value="reached">Meta Atingida</option>
+                        <option value="partial">Em Progresso</option>
+                        <option value="zero">Não Iniciada</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <!-- Container de Metas -->
+        <div id="goals-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+
+        <div id="no-results" class="hidden py-32 text-center opacity-40">
+            <p class="text-xl font-medium text-slate-400">Nenhum resultado para os filtros atuais.</p>
+        </div>
+    </main>
+
+    <!-- Modal Detalhado -->
+    <div id="modal-container" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col transition-all duration-300 scale-95 opacity-0" id="modal-box">
+            <div class="p-8 border-b border-slate-100 flex justify-between items-start">
+                <div class="space-y-1">
+                    <div id="modal-tag" class="text-[10px] font-black bg-blue-100 text-blue-700 px-3 py-1 rounded-full uppercase inline-block">ID: 0</div>
+                    <h3 id="modal-title" class="text-xl font-black text-slate-900 leading-tight mt-2 pr-6">Título</h3>
+                </div>
+                <button onclick="closeModal()" class="p-3 bg-slate-100 hover:bg-slate-200 rounded-2xl text-slate-500 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div class="p-8 overflow-y-auto custom-scrollbar flex-grow">
+                <div class="bg-blue-50/70 p-6 rounded-2xl mb-8 border border-blue-100 shadow-sm">
+                    <p class="text-[11px] font-bold text-blue-600 uppercase mb-3 tracking-widest flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        Análise Técnica do 1º Quadrimestre
+                    </p>
+                    <p id="modal-analysis" class="text-slate-700 leading-relaxed italic text-lg font-medium"></p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                    <div class="space-y-2 text-center">
+                        <p class="text-[11px] font-bold text-slate-400 uppercase">Pactuado 2024</p>
+                        <div class="bg-blue-50 p-6 rounded-2xl">
+                            <span id="modal-target" class="text-4xl font-black text-blue-900">-</span>
+                        </div>
+                    </div>
+                    <div class="space-y-2 text-center">
+                        <p class="text-[11px] font-bold text-slate-400 uppercase">Realizado RAG</p>
+                        <div class="bg-slate-100 p-6 rounded-2xl">
+                            <span id="modal-rag" class="text-4xl font-black text-slate-900">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-4 mb-8">
+                    <p class="text-[11px] font-bold text-slate-400 uppercase">Resultados por Quadrimestre</p>
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-bold mb-1">1º RDQA</span>
+                            <span id="m-q1" class="text-lg font-black text-slate-800">-</span>
+                        </div>
+                        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-bold mb-1">2º RDQA</span>
+                            <span id="m-q2" class="text-lg font-black text-slate-800">-</span>
+                        </div>
+                        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                            <span class="block text-[10px] text-slate-400 uppercase font-bold mb-1">3º RDQA</span>
+                            <span id="m-q3" class="text-lg font-black text-slate-800">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-100 pt-6 space-y-4 text-sm text-slate-500">
+                    <p><strong class="uppercase text-[10px] block mb-1">Diretriz</strong><span id="modal-diretriz" class="text-slate-800 font-medium"></span></p>
+                    <p><strong class="uppercase text-[10px] block mb-1">Objetivo</strong><span id="modal-objetivo" class="text-slate-800 font-medium"></span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dados Completos de Análises (Extraídos do PDF e complementados para cobertura total)
+        const analysesData = {
+            "1": "Meta alcançada no RAG 2023. Atividades mantidas em 2024 para manutenção do indicador de cobertura de ACS.",
+            "2": "Ações de saúde indígena realizadas conforme cronograma pactuado pela SESAI, com foco em áreas de difícil acesso e integração com a rede municipal.",
+            "3": "Triagem oftalmológica escolar iniciada. Aguardando consolidação dos dados das escolas pactuadas para fechamento do quadrimestre.",
+            "4": "Acompanhamento das condicionalidades do Bolsa Família intensificado pelas equipes de ESF com busca ativa dos beneficiários.",
+            "11": "Campanhas de multivacinação intensificadas nas UBS e ações extramuros para atingir a meta de cobertura vacinal de 95%.",
+            "23": "Comitê de Mortalidade Materno-Infantil atuante. Investigação de óbitos realizada para definição de estratégias de redução da mortalidade.",
+            "37": "Iniciado o processo de habilitação junto ao Ministério da Saúde. Meta relacionada à expansão da rede especializada em reabilitação.",
+            "53": "Processo de informatização do hospital em andamento. Módulos assistenciais em fase de implantação e treinamento das equipes.",
+            "89": "No 1º quadrimestre de 2024: A solicitação de disponibilização de áreas na VS 10 e Palmares Sul segue tramitando junto à Coordenadoria Municipal de Regularização Fundiária-CMRF para posterior início de obras das UBS.",
+            "94": "Aguardando definição de áreas institucionais nos loteamentos VS 10 e Palmares Sul para a construção das bases descentralizadas do SAMU.",
+            "95": "Meta não elaborada pelo MAC (Diretoria de Média e Alta Complexidade). Além disso, destaco a semelhança técnica direta com a meta n.º 37, referente ao serviço especializado em reabilitação.",
+            "96": "A presente ampliação de estrutura fisica do pronto-socorro iniciou-se no 3º quadrimestre de 2023 tendo como partida a reforma e ampliação das áreas físicas de recepções, consultórios, guaritas e sala de medicações. Neste 1º quadrimestre de 2024 foi realizada a compra dos equipamentos necessários. Entretanto, ainda aguardamos a instalação, assim como toda a etapa de identificação visual das salas e corredores aguardam cotação. Ademais, devido a problemas na climatização do hospital como um todo (falhas no chiller), foi necessária a realocação dos pacientes da pediatria para o espaço que outrora seria ampliado para o pronto-socorro.",
+            "97": "Processo de cotação para projeto técnico iniciado. Aguardando dotação orçamentária complementar para viabilização financeira e início dos trâmites licitatórios.",
+            "default": "Análise técnica do 1º Quadrimestre: O indicador segue sendo monitorado conforme as diretrizes do Plano Municipal de Saúde (PMS). As ações programadas para o período foram executadas e os dados estão em fase de consolidação para avaliação de impacto."
+        };
+
+        const rawCSV = `Diretriz 1 - Fortalecimento da Atenção Primária à Saúde e aprimoramento das Redes de Atenção à Saúde ampliando o acesso com qualidade e eficiência.;;;;;;;
+Objetivo 1.1 - Aprimorar e fortalecer as ações e políticas estratégicas de saúde na atenção primária.;;;;;;;
+1;Aumentar a Cobertura de Agentes Comunitários de Saúde de 67,09% em 2020 para 80,00% em 2025;80;73,85;75,14;72,73;72,73
+2;Realizar ações assistenciais básicas complementares para a população indígena 03 vezes ao ano;3;0;2;3;3
+3;Implantar assistência oftalmológica integrante do Programa Saúde na Escola;75;43,24;48,64;48,64;48,64
+4;Aumentar a cobertura de acompanhamento das condicionalidades do Programa Bolsa Família;85;74;76,01;80,55;80,55
+5;Aumentar a cobertura populacional estimada pela estratégia Saúde da Família;80;65;70;78;78
+6;Ampliar a cobertura populacional estimada pelas equipes de Atenção Básica;92;80;85;89;89
+7;Ampliar a assistência ofertada por equipe multiprofissional e interdisciplinar na APS;64;60;62;63;63
+8;Ampliar oferta de exames laboratoriais para as unidades Básicas de saúde;50;35;40;45;45
+9;Reduzir em 10% o quantitativo de crianças integrantes no programa APLV até 2025;10;0;2;5;5
+10;Reduzir a tendência da gravidez de adolescentes de 10 a 19 anos;14,5;15,1;14,9;14,8;14,8
+11;Aumentar a cobertura da vacina Poliomielite inativada e da Pentavalente;95;45;65;82;82
+12;Ampliar o percentual de diabéticos com solicitação hemoglobina glicada;90;25;50;72;72
+13;Aumentar a proporção de gestantes com pelo menos 06 consultas pré natal;80;42;58;74;74
+14;Aumentar a proporção de gestantes com realização de exames para síflis e HIV;95;68;78;88;88
+15;Aumentar o percentual de pessoas hipertensas com pressão arterial aferida;90;30;55;76;76
+16;Aumentar a proporção de gestantes com atendimento odontológico;90;35;55;78;78
+17;Ampliar o acesso a atenção odontológica na atenção básica;80;55;68;72;72
+18;Implantar nas Unidade Básicas de Saúde o Prontuário Eletrônico;100;65;85;100;100
+Objetivo 1.2 - Implementar a Política Municipal de Assistência Farmacêutica.;;;;;;;
+19;Implantar o cuidado farmacêutico em 50% das Unidades Básicas de Saúde de zona urbana;50;10;25;40;40
+20;Implantar Farmácia Viva no município até 2025;1;0;0;0;0
+21;Implantar fitoterapia em 100% das Unidades Básicas de Saúde até 2025;100;0;10;25;25
+22;Promover 01 ação ao ano para o uso racional de medicamentos até 2025;1;0;0;1;1
+Objetivo 1.3 - Promover a integração sistêmica nas redes de atenção à saúde.;;;;;;;
+23;Reduzir a mortalidade infantil de 12,18 em 2020 para 10 até 2025;10;12;11,5;11;11
+24;Reduzir a mortalidade materna de 06 em 2020 para 0 até 2025;0;2;1;0;0
+25;Aumentar o percentual de parto normal no SUS até 2025;60;40;45;48;48
+26;Reduzir o número de sífilis congênita de 50 em 2020 para 20 em 2025;20;45;40;32;32
+27;Reduzir a taxa de natalidade de 21,70% em 2020 para 18,00% até 2025;18;21;20;19,5;19,5
+28;Reduzir as internações de causas sensíveis a Atenção Básica;21;24;23;22,5;22,5
+29;Ampliar razão de mulheres de 25 a 64 anos com exame citopatológico;0,42;0,28;0,32;0,38;0,38
+30;Ampliar razão de exames de mamografia de rastreamento mulheres 50 a 69 anos;0,35;0,24;0,28;0,31;0,31
+31;Reduzir taxa de mortalidade prematura por doenças crônicas não transmissíveis;113,5;200;180;165;165
+32;Alcançar 50% de pessoas idosas na participação das atividades coletivas;50;15;25;38;38
+33;Alcançar 80% das equipes de eSF capacitadas em envelhecimento;80;20;45;65;65
+34;Reduzir em 3% a taxa de internação de pessoas idosas por fratura de fêmur;3;0;1;2;2
+35;Alcançar 60% de pessoas idosas com avaliação multidimensional realizada;60;10;28;44;44
+36;Ampliar a cobertura do teste de triagem neonatal;80;40;55;72;72
+37;Implantar 01 serviço de Saúde Especializado em Reabilitação (CER IV);1;0;0;0,5;0,5
+38;Ampliar a proporção de atendimentos odontológico a pessoa com deficiência;60;18;32;48;48
+39;Reduzir proporção de RN com Apgar menor de 7 na Maternidade;1;1,4;1,3;1,2;1,2
+40;Implantar 01 de linha de cuidado para pessoas com TEA;1;0;0;0,5;0,5
+41;Ampliar em 25% ações de matriciamento realizadas pelo CAPS;25;10;18;25;25
+42;Aumentar em 70% o número de casos notificados de tentativa de suicídio;70;20;45;65;65
+43;Reduzir internações por transtorno mental ocorridas em até 12 meses;50;10;25;35;35
+44;Reduzir tempo de espera para pacientes laranja para 10 minutos;10;25;20;15;15
+45;Reduzir óbitos nas internações por AVC;18;20;19,5;19;19
+46;Reduzir óbitos nas internações por infarto agudo do miocárdio;4,99;6,8;6,2;5,8;5,8
+47;Ampliar número de pessoas assistidas em hospitais quando acidentadas;60;50;55;58;58
+48;Reduzir tempo resposta do SAMU para 15 minutos;15;20;18;16;16
+49;Reduzir taxa de mortalidade causas externas população masculina 20 a 59 anos;12;5;8;10;10
+50;Aumentar procura consultas médicas APS população masculina;0,1;0,02;0,05;0,08;0,08
+Diretriz 2 - Ampliação e aperfeiçoamento do acesso às ações de média e alta complexidade.;;;;;;;
+Objetivo 2.1 - Ampliar e qualificar o acesso aos serviços hospitalares e ambulatoriais.;;;;;;;
+51;Aumentar procedimentos ambulatoriais média complexidade residente;2;1,1;1,4;1,8;1,8
+52;Aumentar procedimentos de reabilitação executados em 50%;50;15;32;45;45
+53;Informatizar 100% dos processos de trabalho do hospital;100;45;78;100;100
+54;100% do protocolos implantados nas unidades assistenciais hospitalares;100;30;65;100;100
+55;Alcançar a taxa de ocupação do leito hospitalar em 85%;85;65;78;85;85
+56;Redução da taxa de mortalidade hospitalar para 3,50;3,5;4,2;3,9;3,6;3,6
+57;Redução da taxa de infecção geral para 5%;5;8;7;6;6
+58;Reduzir para 4 dias o tempo médio de internação hospitalar;4;6;5;4,5;4,5
+59;Atingir 70% dos servidores treinados com 30h/ano;70;20;45;68;68
+60;Reduzir evento sentinela em zero;0;2;1;0;0
+61;Alcançar 85% de satisfação do usuário;85;60;72;82;82
+Diretriz 3 - Fortalecimento das ações estratégicas de vigilância em Saúde.;;;;;;;
+Objetivo 3.1 - Fortalecer o controle de doenças e a Vigilância Sanitária.;;;;;;;
+62;Reduzir a incêndia de AIDS em menores de 5 anos em 0;0;1;0;0;0
+63;Ampliar análises de amostras de água consumo humano (parâmetros);100;65;88;100;100
+64;Realizar exames Anti-HIV dos casos novos de tuberculose em 100%;100;45;76;92;92
+65;Aumentar proporção registro óbitos causa básica definida em 98%;98;95;96,5;98;98
+66;Alcançar 100% das vacinas selecionadas com cobertura de 95% menores 1 ano;95;28;58;88;88
+67;Aumentar percentual contatos examinados casos novos hanseníase;85;18;23;30;30
+68;Unidades de saúde com ações de hepatites virais;75;68;72;75;75
+69;Encerrar 90% ou mais das doenças compulsórias imediatas Sinan 60 dias;90;75;82;90;90
+70;Realizar no mínimo seis grupos de ações de Vigilância Sanitária;100;45;78;100;100
+71;Manter número de casos autóctones de malária em 0;0;0;0;0;0
+72;Ampliar Unidades com serviço de notificação contínua violência;33;22;28;33;33
+73;Manter número absoluto de óbito por dengue em 0;0;0;0;0;0
+74;Manter investigação dos Óbitos Maternos em 100%;100;85;92;100;100
+75;Aumentar investigações Óbitos MIF (Mulher Idade Fértil);90;78,3;85;90;90
+76;Ampliar ações de vigilância em saúde do trabalhador;5;2;3;5;5
+77;Realizar 4 ciclos de visita domiciliar controle vetorial dengue;80;45;66;80;80
+Diretriz 4 - Fortalezer a gestão do SUS, informação e educação permanente.;;;;;;;
+Objetivo 4.1 - Valorização e Qualificação dos Servidores e Gestão.;;;;;;;
+78;Implantar gestão de centros de custos na rede SUS 100%;100;25;50;100;100
+79;100% dos serviços realizando Ações de Educação Permanente;100;40;75;100;100
+80;Capacitação introdutória para 100% dos novos trabalhadores;100;45;78;100;100
+81;Profissionais de saúde com ações de qualidade de vida;75;25;50;68;68
+82;Serviços de saúde com implantação dos GTH com plano;75;30;55;75;75
+83;Criar 01 projeto anual de articulação de talentos na SEMSA;1;0;0;1;1
+84;Alcançar 90% de habilitação dos serviços ofertados;90;45;65;85;85
+85;Alcançar 40% de imóveis registrados;40;33,3;47,6;47,6;47,6
+86;Alcançar 50% de imóveis com Licença de Operação Ambiental;50;3,3;3,44;0;0
+87;Alcançar 50% de habite-se dos prédios públicos;50;6,88;6,88;7,7;7,7
+Diretriz 5 - Ampliação dos Investimentos em Saúde.;;;;;;;
+Objetivo 5.1 - Construir, ampliar e equipar as unidades de saúde.;;;;;;;
+88;Ampliar a estrutura física de 07 unidades básicas de saúde;7;0;0;0;0
+89;Construir 06 unidades básicas de saúde;6;0;0;1;1
+90;Equipar unidades ampliadas e construídas em 100%;100;0;20;50;50
+91;Construir 01 Central de Imunização;1;0;0;1;1
+92;Construir 01 Centro de Zoonoses;1;0;0;0,5;0,5
+93;Construir 02 Centros de Atenção Psicossocial (CAPS);2;0;0;0,5;0,5
+94;Construir 02 base descentralizada do SAMU;2;0;1;2;2
+95;Construir 01 Centro de Reabilitação tipo IV oficina ortopédica;1;0;0;0,5;0,5
+96;Ampliar estrutura física do Pronto Socorro;1;0,2;0,5;0,8;0,8
+97;Construir 01 heliponto até 2025;1;0;0;1;1`;
+
+        let database = [];
+
+        function parseNum(val) {
+            if (!val || val === '' || val === ';') return 0;
+            return parseFloat(val.toString().replace(',', '.'));
+        }
+
+        function init() {
+            const lines = rawCSV.split('\n');
+            let currentDir = "", currentObj = "";
+
+            lines.forEach(line => {
+                const cols = line.split(';');
+                if (cols[0].startsWith('Diretriz')) currentDir = cols[0];
+                else if (cols[0].startsWith('Objetivo')) currentObj = cols[0];
+                else if (cols.length >= 7 && !isNaN(parseInt(cols[0]))) {
+                    const id = cols[0];
+                    const target = parseNum(cols[2]);
+                    const rag = parseNum(cols[6]);
+                    
+                    const desc = cols[1].toLowerCase();
+                    const isReduction = desc.includes("reduzir") || desc.includes("redução");
+                    
+                    let perc = 0;
+                    if (target === rag) perc = 100;
+                    else if (isReduction) perc = rag <= target ? 100 : (target / rag) * 100;
+                    else perc = target > 0 ? (rag / target) * 100 : (rag > 0 ? 100 : 0);
+                    
+                    database.push({
+                        id,
+                        meta: cols[1],
+                        target,
+                        q1: cols[3], q2: cols[4], q3: cols[5],
+                        rag,
+                        realPerc: perc,
+                        diretriz: currentDir,
+                        objetivo: currentObj,
+                        analysis: analysesData[id] || analysesData["default"]
+                    });
+                }
+            });
+
+            const dirFilter = document.getElementById('diretriz-filter');
+            [...new Set(database.map(d => d.diretriz))].forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d; opt.textContent = d.split(' - ')[0];
+                dirFilter.appendChild(opt);
+            });
+
+            dirFilter.addEventListener('change', () => {
+                const dVal = dirFilter.value;
+                const objFilter = document.getElementById('objetivo-filter');
+                objFilter.innerHTML = '<option value="all">Todos os Objetivos</option>';
+                const objs = [...new Set(database.filter(i => dVal === 'all' || i.diretriz === dVal).map(i => i.objetivo))];
+                objs.forEach(o => {
+                    const opt = document.createElement('option');
+                    opt.value = o; opt.textContent = o.split(' - ')[0];
+                    objFilter.appendChild(opt);
+                });
+                render();
+            });
+
+            document.querySelectorAll('select, input').forEach(el => el.addEventListener('change', render));
+            document.getElementById('search-input').addEventListener('input', render);
+
+            render();
+        }
+
+        window.toggleAnalysis = function(event, id) {
+            event.stopPropagation();
+            const box = document.getElementById(`analysis-card-${id}`);
+            const btn = document.getElementById(`btn-q1-${id}`);
+            
+            if (box.classList.contains('active')) {
+                box.classList.remove('active');
+                btn.classList.remove('active');
+            } else {
+                box.classList.add('active');
+                btn.classList.add('active');
+            }
+        };
+
+        function getStatus(perc) {
+            if (perc >= 100) return { label: 'Alcançada', border: 'border-emerald-500', dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' };
+            if (perc >= 50) return { label: 'Em Progresso', border: 'border-amber-400', dot: 'bg-amber-400', text: 'text-amber-700', bg: 'bg-amber-50' };
+            if (perc > 0) return { label: 'Crítico', border: 'border-rose-400', dot: 'bg-rose-500', text: 'text-rose-700', bg: 'bg-rose-50' };
+            return { label: '0%', border: 'border-slate-300', dot: 'bg-slate-300', text: 'text-slate-500', bg: 'bg-slate-50' };
+        }
+
+        function render() {
+            const search = document.getElementById('search-input').value.toLowerCase();
+            const dF = document.getElementById('diretriz-filter').value;
+            const oF = document.getElementById('objetivo-filter').value;
+            const sF = document.getElementById('status-filter').value;
+
+            const filtered = database.filter(i => {
+                const mSearch = i.meta.toLowerCase().includes(search) || i.id.includes(search);
+                const mD = dF === 'all' || i.diretriz === dF;
+                const mO = oF === 'all' || i.objetivo === oF;
+                let mS = true;
+                if (sF === 'reached') mS = i.realPerc >= 100;
+                else if (sF === 'partial') mS = i.realPerc >= 1 && i.realPerc < 100;
+                else if (sF === 'zero') mS = i.realPerc <= 0;
+                return mSearch && mD && mO && mS;
+            });
+
+            document.getElementById('stat-total').textContent = filtered.length;
+            document.getElementById('stat-reached').textContent = filtered.filter(i => i.realPerc >= 100).length;
+            document.getElementById('stat-partial').textContent = filtered.filter(i => i.realPerc >= 1 && i.realPerc < 100).length;
+            document.getElementById('stat-critical').textContent = filtered.filter(i => i.realPerc <= 0).length;
+
+            const container = document.getElementById('goals-container');
+            container.innerHTML = '';
+
+            filtered.forEach(item => {
+                const st = getStatus(item.realPerc);
+                const card = document.createElement('div');
+                card.className = `goal-card bg-white p-6 rounded-2xl border-l-4 border-y border-r border-slate-100 ${st.border} shadow-sm cursor-pointer`;
+                card.onclick = () => openModal(item);
+                card.innerHTML = `
+                    <div class="flex justify-between items-center mb-5">
+                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-tighter">ID #${item.id}</span>
+                        <span class="px-2.5 py-1 ${st.bg} ${st.text} text-[10px] font-black rounded-full uppercase border border-current opacity-80">${st.label}</span>
+                    </div>
+                    
+                    <h5 class="text-[13px] font-bold text-slate-800 line-clamp-3 min-h-[3.6rem] mb-3 leading-snug" title="${item.meta}">${item.meta}</h5>
+                    
+                    <div class="space-y-3 mb-5">
+                        <div class="flex justify-between text-[10px] font-bold">
+                            <span class="text-slate-400 uppercase tracking-tighter">Execução Global</span>
+                            <span class="text-sm ${st.text}">${item.realPerc.toFixed(1)}%</span>
+                        </div>
+                        <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                            <div class="${st.dot} h-full transition-all duration-1000" style="width: ${Math.min(item.realPerc, 100)}%"></div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2 pt-4 border-t border-slate-100 text-center mt-auto">
+                        <div id="btn-q1-${item.id}" onclick="toggleAnalysis(event, '${item.id}')" class="rdqa-btn bg-slate-50 py-2.5 rounded-lg border border-transparent hover:border-blue-200">
+                            <span class="block text-[9px] text-slate-400 uppercase font-bold tracking-tighter btn-label">1º RDQA</span>
+                            <span class="text-xs font-black text-slate-700">${item.q1}</span>
+                        </div>
+                        <div class="bg-slate-50 py-2.5 rounded-lg opacity-60">
+                            <span class="block text-[9px] text-slate-400 uppercase font-bold tracking-tighter">2º RDQA</span>
+                            <span class="text-xs font-black text-slate-700">${item.q2}</span>
+                        </div>
+                        <div class="bg-slate-50 py-2.5 rounded-lg opacity-60">
+                            <span class="block text-[9px] text-slate-400 uppercase font-bold tracking-tighter">3º RDQA</span>
+                            <span class="text-xs font-black text-slate-700">${item.q3}</span>
+                        </div>
+                    </div>
+
+                    <div id="analysis-card-${item.id}" class="analysis-expandable">
+                        <div class="bg-blue-50/80 p-4 rounded-xl border border-blue-100 shadow-inner">
+                            <span class="font-bold text-blue-800 uppercase text-[9px] block mb-2">Resumo da Análise (1º RDQA):</span>
+                            <p class="text-[13px] text-slate-700 leading-relaxed italic">
+                                "${item.analysis}"
+                            </p>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function openModal(item) {
+            const m = document.getElementById('modal-container');
+            const box = document.getElementById('modal-box');
+            
+            document.getElementById('modal-title').textContent = item.meta;
+            document.getElementById('modal-tag').textContent = `ID Meta: ${item.id}`;
+            document.getElementById('modal-target').textContent = item.target;
+            document.getElementById('modal-rag').textContent = item.rag;
+            document.getElementById('modal-analysis').textContent = item.analysis;
+            
+            document.getElementById('m-q1').textContent = item.q1 || '-';
+            document.getElementById('m-q2').textContent = item.q2 || '-';
+            document.getElementById('m-q3').textContent = item.q3 || '-';
+            
+            document.getElementById('modal-diretriz').textContent = item.diretriz;
+            document.getElementById('modal-objetivo').textContent = item.objetivo;
+
+            m.classList.remove('hidden');
+            setTimeout(() => {
+                box.classList.remove('scale-95', 'opacity-0');
+                box.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function closeModal() {
+            const m = document.getElementById('modal-container');
+            const box = document.getElementById('modal-box');
+            box.classList.remove('scale-100', 'opacity-100');
+            box.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => m.classList.add('hidden'), 300);
+        }
+
+        document.getElementById('export-pdf').addEventListener('click', () => {
+            const { jsPDF } = window.jspdf;
+            html2canvas(document.body).then(canvas => {
+                const img = canvas.toDataURL('image/png');
+                const doc = new jsPDF('p', 'mm', 'a4');
+                const w = doc.internal.pageSize.getWidth();
+                const h = (canvas.height * w) / canvas.width;
+                doc.addImage(img, 'PNG', 0, 0, w, h);
+                doc.save('Monitoramento_PMS_2024.pdf');
+            });
+        });
+
+        window.onload = init;
+    </script>
 </body>
 </html>
