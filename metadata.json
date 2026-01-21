@@ -1,0 +1,5 @@
+{
+  "name": "Painel de Monitoramento RAG Parauapebas",
+  "description": "Dashboard de monitoramento dos resultados históricos do Plano Municipal de Saúde de Parauapebas (2022-2025), com análise qualitativa assistida por IA.",
+  "requestFramePermissions": []
+}
